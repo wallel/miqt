@@ -53,7 +53,9 @@ func (gs *generateState) collectClassNames_Layout(l *UiLayout) []string {
 
 func (gs *generateState) collectClassNames_Widget(u *UiWidget) []string {
 	var ret []string
-
+	if u.Class == "Line" {
+		u.Class = "QFrame"
+	}
 	if u.Name != "" {
 		ret = append(ret, u.Name+" *qt."+u.Class)
 		gs.trackWidgetClasses[u.Name] = u.Class
@@ -170,7 +172,7 @@ func (gs *generateState) renderIcon(iconVal *UiIcon, ret *strings.Builder) strin
 	return iconName
 }
 
-func (gs *generateState) renderProperties(properties []UiProperty, ret *strings.Builder, targetName, parentClass string, isLayout bool) error {
+func (gs *generateState) renderProperties(class string, properties []UiProperty, ret *strings.Builder, targetName, parentClass string, isLayout bool) error {
 
 	contentsMargins := [4]int{gs.DefaultGridMargin, gs.DefaultGridMargin, gs.DefaultGridMargin, gs.DefaultGridMargin} // left, top, right, bottom
 	customContentsMargins := false
@@ -178,11 +180,17 @@ func (gs *generateState) renderProperties(properties []UiProperty, ret *strings.
 
 	for _, prop := range properties {
 		setterFunc := `.Set` + strings.ToUpper(string(prop.Name[0])) + prop.Name[1:]
-
-		if prop.Name == "geometry" {
+		if prop.Name == "orientation" && class == "QFrame" {
+			setterFunc = ".SetFrameShape"
+			if *prop.EnumVal == "Qt::Horizontal" {
+				ret.WriteString(`ui.` + targetName + setterFunc + "(qt.QFrame__HLine)\n")
+			} else {
+				ret.WriteString(`ui.` + targetName + setterFunc + "(qt.QFrame__VLine)\n")
+			}
+		} else if prop.Name == "geometry" {
 			if !(prop.RectVal.X == 0 && prop.RectVal.Y == 0) {
 				// Set all 4x properties
-				ret.WriteString(`ui.` + targetName + `.SetGeometry(qt.NewQRect(` + fmt.Sprintf("%d, %d, %d, %d", prop.RectVal.X, prop.RectVal.Y, prop.RectVal.Width, prop.RectVal.Height) + "))\n")
+				ret.WriteString(`ui.` + targetName + `.SetGeometry(` + fmt.Sprintf("%d, %d, %d, %d", prop.RectVal.X, prop.RectVal.Y, prop.RectVal.Width, prop.RectVal.Height) + ")\n")
 
 			} else if !(prop.RectVal.Width == 0 && prop.RectVal.Height == 0) {
 				// Only width/height were supplied
@@ -378,7 +386,7 @@ func (gs *generateState) generateLayout(l *UiLayout, parentName string, parentCl
 
 	// Layout->Properties
 
-	err := gs.renderProperties(l.Properties, &ret, l.Name, parentClass, true) // Always emit spacing/padding calls
+	err := gs.renderProperties(l.Class, l.Properties, &ret, l.Name, parentClass, true) // Always emit spacing/padding calls
 	if err != nil {
 		return "", err
 	}
@@ -498,7 +506,7 @@ func (gs *generateState) generateWidget(w UiWidget, parentName string, parentCla
 
 	// Properties
 
-	err := gs.renderProperties(w.Properties, &ret, w.Name, parentClass, false)
+	err := gs.renderProperties(w.Class, w.Properties, &ret, w.Name, parentClass, false)
 	if err != nil {
 		return "", err
 	}
